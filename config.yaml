@@ -1,0 +1,16 @@
+bot:
+  prefix: "/"
+  description: "DiddyCoin Currency Management Bot"
+  initial_balance: 100
+  daily_value_increase: 0.05
+
+currency:
+  name: "DiddyCoin"
+  symbol: "Ð"
+  cents_name: "DiddyCent"
+  cents_per_coin: 100
+
+gambling:
+  min_bet: 10
+  max_bet: 1000
+  timeout: 300
