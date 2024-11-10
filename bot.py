@@ -27,6 +27,7 @@ class DiddyBot(commands.Bot):
         await self.db.initialize()
         await self.load_extension('cogs.economy')
         await self.load_extension('cogs.gambling')
+        await self.load_extension('cogs.analytics')
         await self.tree.sync()
 
     async def on_ready(self):

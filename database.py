@@ -1,7 +1,7 @@
 import os
 import asyncpg
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 logger = logging.getLogger('diddy_bot')
 
@@ -174,3 +174,67 @@ class Database:
                    ORDER BY created_at DESC''',
                 game_type
             )
+
+    # Analytics methods
+    async def get_total_currency_supply(self):
+        """Get the total amount of currency in circulation"""
+        async with self.pool.acquire() as conn:
+            return await conn.fetchval('SELECT SUM(balance) FROM accounts')
+
+    async def get_richest_users(self, limit=10):
+        """Get the users with highest balances"""
+        async with self.pool.acquire() as conn:
+            return await conn.fetch('''
+                SELECT user_id, balance 
+                FROM accounts 
+                ORDER BY balance DESC 
+                LIMIT $1
+            ''', limit)
+
+    async def get_transaction_volume(self, days=7):
+        """Get total transaction volume for the last N days"""
+        async with self.pool.acquire() as conn:
+            return await conn.fetch('''
+                SELECT DATE(timestamp) as date,
+                       COUNT(*) as num_transactions,
+                       SUM(ABS(amount)) as volume
+                FROM transactions
+                WHERE timestamp > CURRENT_TIMESTAMP - INTERVAL '$1 days'
+                GROUP BY DATE(timestamp)
+                ORDER BY date DESC
+            ''', days)
+
+    async def get_trading_stats(self):
+        """Get statistics about trading activity"""
+        async with self.pool.acquire() as conn:
+            return await conn.fetchrow('''
+                SELECT 
+                    COUNT(*) as total_trades,
+                    COUNT(*) FILTER (WHERE status = 'completed') as completed_trades,
+                    COUNT(*) FILTER (WHERE status = 'cancelled') as cancelled_trades,
+                    AVG(amount) FILTER (WHERE status = 'completed') as avg_trade_amount
+                FROM trades
+            ''')
+
+    async def get_gambling_stats(self):
+        """Get statistics about gambling activity"""
+        async with self.pool.acquire() as conn:
+            return await conn.fetchrow('''
+                SELECT 
+                    COUNT(*) as total_games,
+                    AVG(bet_amount) as avg_bet_amount,
+                    MAX(bet_amount) as highest_bet
+                FROM active_games
+                WHERE status != 'open'
+            ''')
+
+    async def get_user_transaction_history(self, user_id: int, limit=10):
+        """Get recent transaction history for a user"""
+        async with self.pool.acquire() as conn:
+            return await conn.fetch('''
+                SELECT type, amount, timestamp
+                FROM transactions
+                WHERE user_id = $1
+                ORDER BY timestamp DESC
+                LIMIT $2
+            ''', user_id, limit)
