@@ -39,6 +39,30 @@ class Economy(commands.Cog):
         )
 
     @app_commands.command()
+    async def baltop(self, interaction: discord.Interaction, limit: int = 5):
+        """Show top DiddyCoin balances (default: top 5)"""
+        if not 1 <= limit <= 20:
+            await interaction.response.send_message("Please specify a limit between 1 and 20.")
+            return
+
+        rich_users = await self.bot.db.get_richest_users(limit)
+        if not rich_users:
+            await interaction.response.send_message("No accounts found!")
+            return
+
+        msg = "💰 **Top DiddyCoin Balances**\n```"
+        for i, user_data in enumerate(rich_users, 1):
+            user = await self.bot.fetch_user(user_data['user_id'])
+            balance = user_data['balance']
+            coins = balance // self.bot.config['currency']['cents_per_coin']
+            cents = balance % self.bot.config['currency']['cents_per_coin']
+            msg += f"{i}. {user.name}: {coins} {self.bot.config['currency']['name']} "
+            msg += f"and {cents} {self.bot.config['currency']['cents_name']}\n"
+        msg += "```"
+
+        await interaction.response.send_message(msg)
+
+    @app_commands.command()
     async def value(self, interaction: discord.Interaction):
         """Check current DiddyCoin value"""
         base_value = 1.0
@@ -116,6 +140,7 @@ class Economy(commands.Cog):
         Available Commands:
         /new - Create a new account
         /balance - Check your balance
+        /baltop [limit] - Show top DiddyCoin balances
         /value - Check current DiddyCoin value
         /trade <user> <amount> - Send DiddyCoins to another user
         /accept <trade_id> - Accept a pending trade
