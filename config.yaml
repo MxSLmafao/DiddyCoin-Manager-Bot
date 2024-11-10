@@ -3,6 +3,7 @@ bot:
   description: "DiddyCoin Currency Management Bot"
   initial_balance: 100
   daily_value_increase: 0.05
+  admin_ids: [123456789]  # Example admin ID, should be replaced with actual admin ID
 
 currency:
   name: "DiddyCoin"
