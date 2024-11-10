@@ -50,6 +50,19 @@ class Database:
                     )
                 ''')
 
+                await conn.execute('''
+                    CREATE TABLE IF NOT EXISTS trades (
+                        id SERIAL PRIMARY KEY,
+                        sender_id BIGINT,
+                        receiver_id BIGINT,
+                        amount BIGINT,
+                        status VARCHAR(20),
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (sender_id) REFERENCES accounts(user_id),
+                        FOREIGN KEY (receiver_id) REFERENCES accounts(user_id)
+                    )
+                ''')
+
         except Exception as e:
             logger.error(f"Database initialization error: {e}")
             raise
@@ -79,6 +92,70 @@ class Database:
                     'INSERT INTO transactions (user_id, amount, type) VALUES ($1, $2, $3)',
                     user_id, amount, 'update'
                 )
+
+    async def create_trade(self, sender_id: int, receiver_id: int, amount: int):
+        async with self.pool.acquire() as conn:
+            return await conn.fetchval(
+                '''INSERT INTO trades (sender_id, receiver_id, amount, status)
+                   VALUES ($1, $2, $3, 'pending')
+                   RETURNING id''',
+                sender_id, receiver_id, amount
+            )
+
+    async def get_pending_trades(self, user_id: int):
+        async with self.pool.acquire() as conn:
+            return await conn.fetch(
+                '''SELECT * FROM trades 
+                   WHERE receiver_id = $1 AND status = 'pending'
+                   ORDER BY created_at DESC''',
+                user_id
+            )
+
+    async def execute_trade(self, trade_id: int):
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                trade = await conn.fetchrow(
+                    'SELECT * FROM trades WHERE id = $1 AND status = \'pending\'',
+                    trade_id
+                )
+                
+                if not trade:
+                    return False
+
+                # Update balances
+                await conn.execute(
+                    'UPDATE accounts SET balance = balance - $1 WHERE user_id = $2',
+                    trade['amount'], trade['sender_id']
+                )
+                await conn.execute(
+                    'UPDATE accounts SET balance = balance + $1 WHERE user_id = $2',
+                    trade['amount'], trade['receiver_id']
+                )
+                
+                # Update trade status
+                await conn.execute(
+                    'UPDATE trades SET status = \'completed\' WHERE id = $1',
+                    trade_id
+                )
+                
+                # Record transactions
+                await conn.execute(
+                    'INSERT INTO transactions (user_id, amount, type) VALUES ($1, $2, $3)',
+                    trade['sender_id'], -trade['amount'], 'trade_sent'
+                )
+                await conn.execute(
+                    'INSERT INTO transactions (user_id, amount, type) VALUES ($1, $2, $3)',
+                    trade['receiver_id'], trade['amount'], 'trade_received'
+                )
+                
+                return True
+
+    async def cancel_trade(self, trade_id: int):
+        async with self.pool.acquire() as conn:
+            return await conn.execute(
+                'UPDATE trades SET status = \'cancelled\' WHERE id = $1 AND status = \'pending\'',
+                trade_id
+            )
 
     async def create_game(self, game_type: str, creator_id: int, bet_amount: int):
         async with self.pool.acquire() as conn:
