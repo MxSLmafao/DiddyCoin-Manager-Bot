@@ -13,10 +13,86 @@ class Economy(commands.Cog):
         self.rob_cooldowns = {}
 
     @app_commands.command()
+    async def help(self, interaction: discord.Interaction):
+        """Show available commands"""
+        embed = discord.Embed(
+            title="🪙 DiddyCoin Bot Commands",
+            description="Here are all available commands:",
+            color=discord.Color.gold()
+        )
+
+        # Account & Balance Commands
+        embed.add_field(
+            name="💰 Account & Balance",
+            value="`/new` - Create a new account\n"
+                  "`/balance` - Check your balance\n"
+                  "`/baltop [limit]` - Show top balances\n"
+                  "`/value` - Check current coin value",
+            inline=False
+        )
+
+        # Trading Commands
+        embed.add_field(
+            name="🤝 Trading",
+            value="`/trade <user> <amount>` - Send coins to another user\n"
+                  "`/accept <trade_id>` - Accept a pending trade\n"
+                  "`/decline <trade_id>` - Decline a pending trade\n"
+                  "`/trades` - List your pending trades",
+            inline=False
+        )
+
+        # Gambling Commands
+        embed.add_field(
+            name="🎲 Gambling",
+            value="`/coinflip <amount>` - Start a coinflip game\n"
+                  "`/cfjoin <game_id>` - Join a coinflip game\n"
+                  "`/cflist` - List active coinflip games\n"
+                  "`/rob <user>` - Attempt to rob another user",
+            inline=False
+        )
+
+        embed.set_footer(text=f"Currency: {self.bot.config['currency']['name']} | Made with 💖")
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command()
+    async def baltop(self, interaction: discord.Interaction, limit: int = 5):
+        """Show top DiddyCoin balances (default: top 5)"""
+        if not 1 <= limit <= 20:
+            await interaction.response.send_message("Please specify a limit between 1 and 20.")
+            return
+
+        rich_users = await self.bot.db.get_richest_users(limit)
+        if not rich_users:
+            await interaction.response.send_message("No accounts found!")
+            return
+
+        embed = discord.Embed(
+            title="💰 Top DiddyCoin Balances",
+            description=f"The richest {limit} users:",
+            color=discord.Color.gold()
+        )
+
+        for i, user_data in enumerate(rich_users, 1):
+            user = await self.bot.fetch_user(user_data['user_id'])
+            formatted_balance = self.bot.converter.format_amount(user_data['balance'])
+            
+            # Add medal emoji for top 3
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "💠"
+            embed.add_field(
+                name=f"{medal} #{i} - {user.name}",
+                value=formatted_balance,
+                inline=False
+            )
+
+        embed.set_footer(text=f"Currency: {self.bot.config['currency']['name']}")
+        await interaction.response.send_message(embed=embed)
+
+    # [Previous commands remain unchanged]
+    @app_commands.command()
     async def new(self, interaction: discord.Interaction):
         """Create a new DiddyCoin account"""
         try:
-            initial_balance = self.bot.config['bot']['initial_balance']  # Changed as per manager's request
+            initial_balance = self.bot.config['bot']['initial_balance']
             await self.bot.db.create_account(interaction.user.id, initial_balance)
             formatted_balance = self.bot.converter.format_amount(initial_balance)
             await interaction.response.send_message(
@@ -26,7 +102,6 @@ class Economy(commands.Cog):
             await interaction.response.send_message("Account already exists or error occurred.")
             logger.error(f"Account creation error: {e}")
 
-    # Rest of the file remains unchanged
     @app_commands.command()
     async def balance(self, interaction: discord.Interaction):
         """Check your DiddyCoin balance"""
@@ -106,27 +181,6 @@ class Economy(commands.Cog):
         self.rob_cooldowns[interaction.user.id] = current_time
 
     @app_commands.command()
-    async def baltop(self, interaction: discord.Interaction, limit: int = 5):
-        """Show top DiddyCoin balances (default: top 5)"""
-        if not 1 <= limit <= 20:
-            await interaction.response.send_message("Please specify a limit between 1 and 20.")
-            return
-
-        rich_users = await self.bot.db.get_richest_users(limit)
-        if not rich_users:
-            await interaction.response.send_message("No accounts found!")
-            return
-
-        msg = "💰 **Top DiddyCoin Balances**\n```"
-        for i, user_data in enumerate(rich_users, 1):
-            user = await self.bot.fetch_user(user_data['user_id'])
-            formatted_balance = self.bot.converter.format_amount(user_data['balance'])
-            msg += f"{i}. {user.name}: {formatted_balance}\n"
-        msg += "```"
-
-        await interaction.response.send_message(msg)
-
-    @app_commands.command()
     async def value(self, interaction: discord.Interaction):
         """Check current DiddyCoin value"""
         base_value = 1.0
@@ -197,26 +251,6 @@ class Economy(commands.Cog):
             trades_list += f"ID: {trade['id']} | From: {sender.name} | Amount: {formatted_amount}\n"
 
         await interaction.response.send_message(trades_list)
-
-    @app_commands.command()
-    async def help(self, interaction: discord.Interaction):
-        """Show available commands"""
-        commands_list = """
-        Available Commands:
-        /new - Create a new account
-        /balance - Check your balance
-        /baltop [limit] - Show top DiddyCoin balances
-        /value - Check current DiddyCoin value
-        /trade <user> <amount> - Send DiddyCoins to another user
-        /accept <trade_id> - Accept a pending trade
-        /decline <trade_id> - Decline a pending trade
-        /trades - List your pending trades
-        /rob <user> - Attempt to rob another user
-        /coinflip - Start a coinflip game
-        /cfjoin - Join a coinflip game
-        /cflist - List active coinflip games
-        """
-        await interaction.response.send_message(commands_list)
 
 async def setup(bot):
     await bot.add_cog(Economy(bot))
