@@ -1,0 +1,13 @@
+# Discord Bot Dependencies
+discord.py>=2.3.2
+asyncpg>=0.28.0
+PyYAML>=6.0.1
+python-dotenv>=1.0.0
+
+# Optional Dependencies
+Pillow>=10.1.0  # For image processing if needed
+asyncpg
+discord-py
+pillow
+python-dotenv
+pyyaml
