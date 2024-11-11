@@ -16,7 +16,7 @@ class Economy(commands.Cog):
     async def new(self, interaction: discord.Interaction):
         """Create a new DiddyCoin account"""
         try:
-            initial_balance = self.bot.config['currency']['cents_per_coin'] * 100  # Start with 100 coins worth of cents
+            initial_balance = self.bot.config['bot']['initial_balance']  # Changed as per manager's request
             await self.bot.db.create_account(interaction.user.id, initial_balance)
             formatted_balance = self.bot.converter.format_amount(initial_balance)
             await interaction.response.send_message(
@@ -26,6 +26,7 @@ class Economy(commands.Cog):
             await interaction.response.send_message("Account already exists or error occurred.")
             logger.error(f"Account creation error: {e}")
 
+    # Rest of the file remains unchanged
     @app_commands.command()
     async def balance(self, interaction: discord.Interaction):
         """Check your DiddyCoin balance"""
