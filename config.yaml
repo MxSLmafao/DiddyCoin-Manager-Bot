@@ -1,7 +1,7 @@
 bot:
   prefix: "/"
   description: "DiddyCoin Currency Management Bot"
-  initial_balance: 100
+  initial_balance: 10
   daily_value_increase: 0.05
   admin_ids: 791177475190161419
   # Example admin ID, should be replaced with actual admin ID

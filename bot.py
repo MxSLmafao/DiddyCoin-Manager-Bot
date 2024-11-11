@@ -5,6 +5,7 @@ from discord.ext import commands
 import yaml
 import asyncio
 from database import Database
+from utils.currency import CurrencyConverter
 import logging
 
 # Configure logging
@@ -22,6 +23,7 @@ class DiddyBot(commands.Bot):
         super().__init__(command_prefix=config['bot']['prefix'], intents=intents)
         self.config = config
         self.db = Database()
+        self.converter = CurrencyConverter(config)  # Initialize the currency converter
 
     async def setup_hook(self):
         await self.db.initialize()
