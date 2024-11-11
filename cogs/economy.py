@@ -57,13 +57,16 @@ class Economy(commands.Cog):
     @app_commands.command()
     async def baltop(self, interaction: discord.Interaction, limit: int = 5):
         """Show top DiddyCoin balances (default: top 5)"""
+        # Defer the response immediately
+        await interaction.response.defer()
+
         if not 1 <= limit <= 20:
-            await interaction.response.send_message("Please specify a limit between 1 and 20.")
+            await interaction.followup.send("Please specify a limit between 1 and 20.")
             return
 
         rich_users = await self.bot.db.get_richest_users(limit)
         if not rich_users:
-            await interaction.response.send_message("No accounts found!")
+            await interaction.followup.send("No accounts found!")
             return
 
         embed = discord.Embed(
@@ -85,7 +88,7 @@ class Economy(commands.Cog):
             )
 
         embed.set_footer(text=f"Currency: {self.bot.config['currency']['name']}")
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
     # [Previous commands remain unchanged]
     @app_commands.command()
