@@ -2,21 +2,25 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import logging
+import random
+from datetime import datetime, timedelta
 
 logger = logging.getLogger('diddy_bot')
 
 class Economy(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.rob_cooldowns = {}
 
     @app_commands.command()
     async def new(self, interaction: discord.Interaction):
         """Create a new DiddyCoin account"""
         try:
-            initial_balance = self.bot.config['bot']['initial_balance']
+            initial_balance = self.bot.config['currency']['cents_per_coin'] * 100  # Start with 100 coins worth of cents
             await self.bot.db.create_account(interaction.user.id, initial_balance)
+            formatted_balance = self.bot.converter.format_amount(initial_balance)
             await interaction.response.send_message(
-                f"Account created with {initial_balance} {self.bot.config['currency']['name']}!"
+                f"Account created with {formatted_balance}!"
             )
         except Exception as e:
             await interaction.response.send_message("Account already exists or error occurred.")
@@ -30,13 +34,75 @@ class Economy(commands.Cog):
             await interaction.response.send_message("You don't have an account! Use /new to create one.")
             return
 
-        coins = balance // self.bot.config['currency']['cents_per_coin']
-        cents = balance % self.bot.config['currency']['cents_per_coin']
+        formatted_balance = self.bot.converter.format_amount(balance)
+        await interaction.response.send_message(f"Balance: {formatted_balance}")
+
+    @app_commands.command()
+    async def rob(self, interaction: discord.Interaction, target: discord.User):
+        """Attempt to rob another user"""
+        if target.id == interaction.user.id:
+            await interaction.response.send_message("You can't rob yourself!")
+            return
+
+        # Check cooldown
+        cooldown = 3600  # 1 hour cooldown
+        current_time = datetime.now().timestamp()
+        last_rob = self.rob_cooldowns.get(interaction.user.id, 0)
         
-        await interaction.response.send_message(
-            f"Balance: {coins} {self.bot.config['currency']['name']} "
-            f"and {cents} {self.bot.config['currency']['cents_name']}"
-        )
+        if current_time - last_rob < cooldown:
+            time_left = int(cooldown - (current_time - last_rob))
+            minutes = time_left // 60
+            seconds = time_left % 60
+            await interaction.response.send_message(
+                f"You must wait {minutes}m {seconds}s before attempting another robbery!"
+            )
+            return
+
+        # Check balances
+        robber_balance = await self.bot.db.get_balance(interaction.user.id)
+        target_balance = await self.bot.db.get_balance(target.id)
+
+        if robber_balance is None:
+            await interaction.response.send_message("You don't have an account! Use /new to create one.")
+            return
+
+        if target_balance is None:
+            await interaction.response.send_message("Target doesn't have an account!")
+            return
+
+        if target_balance < 100:  # Minimum 1 coin worth of cents to rob
+            await interaction.response.send_message("Target doesn't have enough money to rob!")
+            return
+
+        # Rob mechanics
+        success_rate = 0.3  # 30% success rate
+        if random.random() < success_rate:
+            stolen_amount = random.randint(10, min(target_balance // 4, 1000))  # Max 10 coins or 25% of balance
+            
+            # Update balances
+            await self.bot.db.update_balance(target.id, -stolen_amount)
+            await self.bot.db.update_balance(interaction.user.id, stolen_amount)
+            
+            formatted_amount = self.bot.converter.format_amount(stolen_amount)
+            await interaction.response.send_message(
+                f"🎭 Robbery successful! You stole {formatted_amount} from {target.name}!"
+            )
+        else:
+            # Failed robbery penalty (lose some money)
+            penalty = random.randint(50, 200)  # Lose 0.5-2 coins worth of cents
+            if robber_balance >= penalty:
+                await self.bot.db.update_balance(interaction.user.id, -penalty)
+                formatted_penalty = self.bot.converter.format_amount(penalty)
+                await interaction.response.send_message(
+                    f"😅 Robbery failed! You got caught and lost {formatted_penalty}!"
+                )
+            else:
+                await interaction.response.send_message(
+                    "😅 Robbery failed! You got caught but had nothing to lose!"
+                )
+
+        # Set cooldown
+        self.rob_cooldowns[interaction.user.id] = current_time
 
     @app_commands.command()
     async def baltop(self, interaction: discord.Interaction, limit: int = 5):
@@ -53,11 +119,8 @@ class Economy(commands.Cog):
         msg = "💰 **Top DiddyCoin Balances**\n```"
         for i, user_data in enumerate(rich_users, 1):
             user = await self.bot.fetch_user(user_data['user_id'])
-            balance = user_data['balance']
-            coins = balance // self.bot.config['currency']['cents_per_coin']
-            cents = balance % self.bot.config['currency']['cents_per_coin']
-            msg += f"{i}. {user.name}: {coins} {self.bot.config['currency']['name']} "
-            msg += f"and {cents} {self.bot.config['currency']['cents_name']}\n"
+            formatted_balance = self.bot.converter.format_amount(user_data['balance'])
+            msg += f"{i}. {user.name}: {formatted_balance}\n"
         msg += "```"
 
         await interaction.response.send_message(msg)
@@ -95,9 +158,10 @@ class Economy(commands.Cog):
             return
 
         trade_id = await self.bot.db.create_trade(interaction.user.id, user.id, amount)
+        formatted_amount = self.bot.converter.format_amount(amount)
         await interaction.response.send_message(
             f"Trade offer sent to {user.name}!\n"
-            f"Amount: {amount} {self.bot.config['currency']['cents_name']}\n"
+            f"Amount: {formatted_amount}\n"
             f"They can accept it using `/accept {trade_id}`"
         )
 
@@ -128,8 +192,8 @@ class Economy(commands.Cog):
         trades_list = "Pending Trades:\n"
         for trade in pending_trades:
             sender = await self.bot.fetch_user(trade['sender_id'])
-            trades_list += f"ID: {trade['id']} | From: {sender.name} | "
-            trades_list += f"Amount: {trade['amount']} {self.bot.config['currency']['cents_name']}\n"
+            formatted_amount = self.bot.converter.format_amount(trade['amount'])
+            trades_list += f"ID: {trade['id']} | From: {sender.name} | Amount: {formatted_amount}\n"
 
         await interaction.response.send_message(trades_list)
 
@@ -146,7 +210,7 @@ class Economy(commands.Cog):
         /accept <trade_id> - Accept a pending trade
         /decline <trade_id> - Decline a pending trade
         /trades - List your pending trades
-        /exchange - Convert between coins and cents
+        /rob <user> - Attempt to rob another user
         /coinflip - Start a coinflip game
         /cfjoin - Join a coinflip game
         /cflist - List active coinflip games
